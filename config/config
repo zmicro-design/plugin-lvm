@@ -1,0 +1,5 @@
+export PLUGIN_LVM_NAME=lvm
+
+export VG_NAME=vgdevice
+export LV_NAME=lvdevice
+export MOUNT_PATH=/data/lvm
