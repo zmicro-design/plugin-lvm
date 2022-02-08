@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# set -x
+# set -e
+
 is_lvm_created() {
   sudo vgs | grep $VG_NAME >> /dev/null 2>&1
   if [ "$?" != "0" ]; then
@@ -48,28 +51,49 @@ add() {
     sudo vgcreate $VG_NAME $device
     is_first_create="true"
   else
-    sudo vgextend $VG_NAME $device
+    sudo pvs | grep $device | grep $VG_NAME >> /dev/null 2>&1
+    if [ "$?" != "0" ]; then
+      sudo vgextend $VG_NAME $device
+    fi
   fi
 
   # 3.create or extend a logical volume
   sudo lvs | grep $LV_NAME >> /dev/null 2>&1
   if [ "$?" != "0" ]; then
     # create
-    local size=$(sudo lsblk | grep ${deviceName} | awk '{print $4}')
+    local size=$(sudo lsblk | grep ${deviceName} | awk '{print $4}' | awk -F 'G' '{print $1}')
+    # -1
+    size="$(( size - 1))G"
     sudo lvcreate -n $LV_NAME -L $size $VG_NAME
+    if [ "$?" != "0" ]; then
+      log::error "failed to add $device to lvm (1)"
+      exit 1
+    fi
   else
     # extend
-    sudo lvextend -l +100%FREE /dev/$VG_NAME/$LV_NAME
+    sudo lvextend -l +100%FREE /dev/$VG_NAME/$LV_NAME >> /dev/null 2>&1
+    # if [ "$?" != "0" ]; then
+    #   log::error "failed to add $device to lvm (2)"
+    #   exit 1
+    # fi
   fi
 
   # 4.format ext4
   if [ "$is_first_create" = "true" ]; then
     sudo mkfs.ext4 /dev/$VG_NAME/$LV_NAME
+    if [ "$?" != "0" ]; then
+      log::error "failed to add $device to lvm (3)"
+      exit 1
+    fi
   fi
 
   # 5.mount path
   sudo mount | grep $MOUNT_PATH >> /dev/null 2>&1
   if [ "$?" != "0" ]; then
+    if [ ! -d "$MOUNT_PATH" ]; then
+      sudo mkdir -p $MOUNT_PATH
+    fi
+
     sudo mount /dev/$VG_NAME/$LV_NAME $MOUNT_PATH
   fi
 
@@ -81,11 +105,11 @@ add() {
 
 help() {
   echo "Usage:"
-  echo "  zmachine lvm add <device>"
+  echo "  zmicro lvm add <device>"
   echo ""
   echo "Example:"
   echo "  add /dev/sda:"
-  echo "    zmachine lvm add /dev/sda"
+  echo "    zmicro lvm add /dev/sda"
   echo ""
 }
 
